@@ -2416,28 +2416,22 @@
             updateDynamicIcons(totalWeightForIcons);
 
             const applyAutoSurcharge = (id, count) => {
-                // Инициализация, если нет в стейте
+                // Надбавки за место (25+ / 70.1+ / негабарит) всегда считаются автоматически.
+                // Это гарантирует правило: на одно место применяется только одна, самая дорогая,
+                // а в итоге не остаются "залипшие" лишние надбавки из прошлого расчета.
                 if (!state.selectedSurcharges[id]) {
                     state.selectedSurcharges[id] = { active: false, qty: 1, manuallyUnchecked: false, manuallyEdited: false };
                 }
-                const item = state.selectedSurcharges[id];
 
-                // Логика АВТО-ВКЛЮЧЕНИЯ
-                if (count > 0) {
-                    // Если обнаружено условие (например, вес > 70кг)
-                    // Включаем, ТОЛЬКО если пользователь не выключал это вручную
-                    if (!item.manuallyUnchecked && !item.active) {
-                        item.active = true;
-                    }
-                    
-                    // Обновляем количество, ТОЛЬКО если пользователь не менял его вручную
-                    if (!item.manuallyEdited) {
-                        item.qty = count;
-                    }
-                } 
-                // ВАЖНО: Мы УБРАЛИ блок "else { item.active = false }".
-                // Теперь, если условие пропало (count === 0), надбавка НЕ выключится сама,
-                // если она была включена. Это дает полный ручной контроль.
+                const item = state.selectedSurcharges[id];
+                const shouldBeActive = count > 0;
+
+                item.active = shouldBeActive;
+                item.qty = shouldBeActive ? count : 1;
+
+                // Сбрасываем ручные флаги, чтобы автоматический расчет оставался приоритетным.
+                item.manuallyUnchecked = false;
+                item.manuallyEdited = false;
             };
 
             applyAutoSurcharge('overweightPiece', overweightCount);
