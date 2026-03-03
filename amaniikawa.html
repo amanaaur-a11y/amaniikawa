@@ -2416,28 +2416,22 @@
             updateDynamicIcons(totalWeightForIcons);
 
             const applyAutoSurcharge = (id, count) => {
-                // Инициализация, если нет в стейте
+                // Надбавки за место (25+ / 70.1+ / негабарит) всегда считаются автоматически.
+                // Это гарантирует правило: на одно место применяется только одна, самая дорогая,
+                // а в итоге не остаются "залипшие" лишние надбавки из прошлого расчета.
                 if (!state.selectedSurcharges[id]) {
                     state.selectedSurcharges[id] = { active: false, qty: 1, manuallyUnchecked: false, manuallyEdited: false };
                 }
-                const item = state.selectedSurcharges[id];
 
-                // Логика АВТО-ВКЛЮЧЕНИЯ
-                if (count > 0) {
-                    // Если обнаружено условие (например, вес > 70кг)
-                    // Включаем, ТОЛЬКО если пользователь не выключал это вручную
-                    if (!item.manuallyUnchecked && !item.active) {
-                        item.active = true;
-                    }
-                    
-                    // Обновляем количество, ТОЛЬКО если пользователь не менял его вручную
-                    if (!item.manuallyEdited) {
-                        item.qty = count;
-                    }
-                } 
-                // ВАЖНО: Мы УБРАЛИ блок "else { item.active = false }".
-                // Теперь, если условие пропало (count === 0), надбавка НЕ выключится сама,
-                // если она была включена. Это дает полный ручной контроль.
+                const item = state.selectedSurcharges[id];
+                const shouldBeActive = count > 0;
+
+                item.active = shouldBeActive;
+                item.qty = shouldBeActive ? count : 1;
+
+                // Сбрасываем ручные флаги, чтобы автоматический расчет оставался приоритетным.
+                item.manuallyUnchecked = false;
+                item.manuallyEdited = false;
             };
 
             applyAutoSurcharge('overweightPiece', overweightCount);
@@ -2546,8 +2540,17 @@
             let dutiesTaxesAmount = 0;
             const surchargesBreakdown = [];
            
+            const autoPieceCounts = {
+                overweightPiece: overweightCount,
+                heavyPiece: heavyCount,
+                oversizePiece: oversizeCount
+            };
+
             Object.keys(state.selectedSurcharges).forEach(id => {
                 if (id === 'demandSurcharge') return;
+                // Надбавки за место считаем строго от текущего расчета мест, а не от ручных чекбоксов.
+                if (id in autoPieceCounts) return;
+
                 const item = state.selectedSurcharges[id];
                 if (item?.active) {
                     const config = SURCHARGES_CONFIG[id];
@@ -2590,6 +2593,16 @@
                 }
             });
 
+            // Автоматические надбавки за место: всегда из текущих счетчиков и только по одной на место.
+            Object.entries(autoPieceCounts).forEach(([id, count]) => {
+                if (count <= 0) return;
+                const config = SURCHARGES_CONFIG[id];
+                if (!config) return;
+                const cost = config.rate * count;
+                totalSurcharges += cost;
+                surchargesBreakdown.push({ name: config.name, cost, formula: `${config.rate} * ${count}` });
+            });
+
             // --- УПАКОВКА (PACKAGING) ---
             let totalPackagingCost = 0;
             const packagingBreakdown = [];
@@ -2616,13 +2629,6 @@
                 totalPieceSurcharges += applicable;
             }); 
             */
-
-            if (state.selectedSurcharges['nonStackable']?.active) {
-                 const config = SURCHARGES_CONFIG['nonStackable'];
-                 const cost = config.rate * (state.selectedSurcharges['nonStackable'].qty || 1);
-                 totalSurcharges += cost;
-                 surchargesBreakdown.push({ name: config.name, cost });
-            }
 
             // Добавляем упаковку к сумме до топлива
             let preFuelTotal = (baseTariff - discountAmount) + demandSurcharge + extraCharges + totalSurcharges + totalPieceSurcharges + totalPackagingCost;
