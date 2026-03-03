@@ -2540,8 +2540,17 @@
             let dutiesTaxesAmount = 0;
             const surchargesBreakdown = [];
            
+            const autoPieceCounts = {
+                overweightPiece: overweightCount,
+                heavyPiece: heavyCount,
+                oversizePiece: oversizeCount
+            };
+
             Object.keys(state.selectedSurcharges).forEach(id => {
                 if (id === 'demandSurcharge') return;
+                // Надбавки за место считаем строго от текущего расчета мест, а не от ручных чекбоксов.
+                if (id in autoPieceCounts) return;
+
                 const item = state.selectedSurcharges[id];
                 if (item?.active) {
                     const config = SURCHARGES_CONFIG[id];
@@ -2584,6 +2593,16 @@
                 }
             });
 
+            // Автоматические надбавки за место: всегда из текущих счетчиков и только по одной на место.
+            Object.entries(autoPieceCounts).forEach(([id, count]) => {
+                if (count <= 0) return;
+                const config = SURCHARGES_CONFIG[id];
+                if (!config) return;
+                const cost = config.rate * count;
+                totalSurcharges += cost;
+                surchargesBreakdown.push({ name: config.name, cost, formula: `${config.rate} * ${count}` });
+            });
+
             // --- УПАКОВКА (PACKAGING) ---
             let totalPackagingCost = 0;
             const packagingBreakdown = [];
@@ -2610,13 +2629,6 @@
                 totalPieceSurcharges += applicable;
             }); 
             */
-
-            if (state.selectedSurcharges['nonStackable']?.active) {
-                 const config = SURCHARGES_CONFIG['nonStackable'];
-                 const cost = config.rate * (state.selectedSurcharges['nonStackable'].qty || 1);
-                 totalSurcharges += cost;
-                 surchargesBreakdown.push({ name: config.name, cost });
-            }
 
             // Добавляем упаковку к сумме до топлива
             let preFuelTotal = (baseTariff - discountAmount) + demandSurcharge + extraCharges + totalSurcharges + totalPieceSurcharges + totalPackagingCost;
